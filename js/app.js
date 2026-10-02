@@ -6,13 +6,21 @@ let taskMessage = document.getElementById("taskMessage");
 let totalCount = document.getElementById("totalCount");
 let pendingCount = document.getElementById("pendingCount");
 let completedCount = document.getElementById("completedCount");
-let taskCounter = 0;
 
-function createTaskElement(taskText, taskId) {
+let taskCounter = parseInt(localStorage.getItem('taskCounter')) || 0;
+let savedTasks = JSON.parse(localStorage.getItem('tasks')) || [];
+
+function saveToStorage() {
+    localStorage.setItem('tasks', JSON.stringify(savedTasks));
+    localStorage.setItem('taskCounter', taskCounter.toString());
+}
+
+function createTaskElement(taskText, taskId, state = "pending") {
     let li = document.createElement("li");
     li.classList.add("task-item");
     li.dataset.taskId = taskId;
-    li.dataset.state = "pending";
+    li.dataset.state = state;
+    if (state === "completed") li.classList.add("completed");
 
     let span = document.createElement("span");
     span.classList.add("task-text");
@@ -34,7 +42,6 @@ function createTaskElement(taskText, taskId) {
     li.appendChild(completeBtn);
     li.appendChild(editBtn);
     li.appendChild(removeBtn);
-
     return li;
 }
 
@@ -45,8 +52,12 @@ function addTask(taskText) {
     }
     taskCounter++;
     let taskId = "task-" + taskCounter;
-    let taskElement = createTaskElement(taskText.trim(), taskId);
+    let taskElement = createTaskElement(taskText.trim(), taskId, "pending");
     taskList.appendChild(taskElement);
+
+    savedTasks.push({ id: taskId, text: taskText.trim(), state: "pending" });
+    saveToStorage();
+
     taskInput.value = "";
     taskMessage.textContent = "";
     updateTaskCounts();
@@ -59,6 +70,8 @@ function toggleTaskComplete(taskItem) {
     } else {
         taskItem.dataset.state = "pending";
     }
+    let saved = savedTasks.find(t => t.id === taskItem.dataset.taskId);
+    if (saved) { saved.state = taskItem.dataset.state; saveToStorage(); }
     updateTaskCounts();
 }
 
@@ -85,9 +98,14 @@ function saveTaskEdit(taskItem) {
     input.replaceWith(newSpan);
     editBtn.textContent = "Edit";
     taskMessage.textContent = "";
+
+    let saved = savedTasks.find(t => t.id === taskItem.dataset.taskId);
+    if (saved) { saved.text = newSpan.textContent; saveToStorage(); }
 }
 
 function removeTask(taskItem) {
+    savedTasks = savedTasks.filter(t => t.id!== taskItem.dataset.taskId);
+    saveToStorage();
     taskItem.remove();
     updateTaskCounts();
 }
@@ -97,11 +115,8 @@ function updateTaskCounts() {
     let pending = 0;
     let completed = 0;
     for (let i = 0; i < tasks.length; i++) {
-        if (tasks[i].dataset.state === "completed") {
-            completed++;
-        } else {
-            pending++;
-        }
+        if (tasks[i].dataset.state === "completed") completed++;
+        else pending++;
     }
     totalCount.textContent = tasks.length;
     pendingCount.textContent = pending;
@@ -110,22 +125,13 @@ function updateTaskCounts() {
 
 function handleTaskListClick(event) {
     let taskItem = event.target.closest(".task-item");
-    if (!taskItem) {
-        return;
-    }
-    if (event.target.matches(".complete-btn")) {
-        toggleTaskComplete(taskItem);
-    }
+    if (!taskItem) return;
+    if (event.target.matches(".complete-btn")) toggleTaskComplete(taskItem);
     if (event.target.matches(".edit-btn")) {
-        if (event.target.textContent === "Edit") {
-            beginTaskEdit(taskItem);
-        } else {
-            saveTaskEdit(taskItem);
-        }
+        if (event.target.textContent === "Edit") beginTaskEdit(taskItem);
+        else saveTaskEdit(taskItem);
     }
-    if (event.target.matches(".remove-btn")) {
-        removeTask(taskItem);
-    }
+    if (event.target.matches(".remove-btn")) removeTask(taskItem);
 }
 
 function loadSampleTasks() {
@@ -134,19 +140,25 @@ function loadSampleTasks() {
     for (let i = 0; i < tasks.length; i++) {
         taskCounter++;
         let id = "task-" + taskCounter;
-        let el = createTaskElement(tasks[i], id);
+        let el = createTaskElement(tasks[i], id, "pending");
         fragment.appendChild(el);
+        savedTasks.push({ id: id, text: tasks[i], state: "pending" });
     }
     taskList.appendChild(fragment);
+    saveToStorage();
     updateTaskCounts();
 }
 
-addTaskBtn.addEventListener("click", function() {
-    addTask(taskInput.value);
-});
+function loadSavedOnStart() {
+    for (let t of savedTasks) {
+        let el = createTaskElement(t.text, t.id, t.state);
+        taskList.appendChild(el);
+    }
+    updateTaskCounts();
+}
 
+addTaskBtn.addEventListener("click", function() { addTask(taskInput.value); });
 taskList.addEventListener("click", handleTaskListClick);
+loadSamplesBtn.addEventListener("click", function() { loadSampleTasks(); });
 
-loadSamplesBtn.addEventListener("click", function() {
-    loadSampleTasks();
-});
+loadSavedOnStart();
